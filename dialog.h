@@ -46,8 +46,8 @@ private:
     QList<float> vector2_1;
     QList<float> vector2_2;
     QList<float> vector2_3;
-    int reduccionGyro;
-    int reduccionAccel;
+    int sensiGyro;
+    int sensiAccel;
     float value1_0;
     float value1_1;
     float value1_2;
@@ -71,9 +71,9 @@ private Q_SLOTS:
 private:
         void initActionsConnections();
         void setupRealtimeData(QCustomPlot *customPlot, QCustomPlot *customPlot2);
-        float filterAlgebraic_DerivateEstimation(float valor, QList<float>vector);
-        float filterAlgebraic_Estimation(float valor, QList<float>vector);
-        float filterMedian(float valor, QList<float> vector);
+        float filterAlgebraic_DerivateEstimation(QList<float>vector);
+        float filterAlgebraic_Estimation(QList<float>vector);
+        float filterMedian(QList<float> vector);
 
 signals:
         void logSignal();

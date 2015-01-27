@@ -19,14 +19,15 @@ Dialog::Dialog(QWidget *parent) :
     QString dateTimeString = dateTime.toString("yyyy_MMMdd hh_mm");
     ui->logFile->setText(dateTimeString);
 
-    reduccionGyro = 131; //±250dps
-    reduccionAccel = 16384; //±2g
+    sensiGyro = 131; //±250 º/s veloscidad angular: sensiGyro[LBS/(º/s)]
+    sensiAccel = 16384; //±2g aceleración: sensiAccel[LSB/g]
     timeZero=0.0;
     playOn= false;
     saveLogOn = false;
     graphONag = false;
     flag_calculoGrafica_fin = true;
     ui->led->turnOff();
+    serial = new QSerialPort(this);
 
     QVector<float> setInitialValue;
     setInitialValue<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0;
@@ -41,16 +42,9 @@ Dialog::Dialog(QWidget *parent) :
     vector2_2= QList<float>::fromVector(setInitialValue);;
     vector2_3= QList<float>::fromVector(setInitialValue);;
 
-    serial = new QSerialPort(this);
-//    timer = new QTimer(this);
-//    timer->setInterval(5);
 
     setWindowTitle(tr("Sammic Sense"));
     qDebug()<<"empezamos!";
-    qDebug()<<vectorTemp.size()<<vectorTemp.at(1);
-    vectorTemp[1] =1.2;
-    qDebug()<<vectorTemp.at(1);
-
     initActionsConnections();
 
 }
@@ -74,23 +68,19 @@ void Dialog::initActionsConnections(){
         //        qDebug()<<info.portName();
     }
     ui->portBox->setCurrentIndex(ui->portBox->count()-1); //ui->portBox->count()-1
-
     ui->baudRateBox->addItem(QStringLiteral("9600"), QSerialPort::Baud9600);
     ui->baudRateBox->addItem(QStringLiteral("19200"), QSerialPort::Baud19200);
     ui->baudRateBox->addItem(QStringLiteral("38400"), QSerialPort::Baud38400);
     ui->baudRateBox->addItem(QStringLiteral("115200"), QSerialPort::Baud115200);
     ui->baudRateBox->setCurrentIndex(3);
 
+    setupRealtimeData(ui->customPlot,ui->customPlot2);
 
     connect(ui->openCloseButton, SIGNAL(clicked()), this, SLOT(openSerialPort()));
     connect(serial, SIGNAL(readyRead()),this, SLOT(onSerialRead()));
     connect(ui->sendButton, SIGNAL(clicked()), SLOT(onSerialWrite()));
     connect(ui->playButton, SIGNAL(clicked()), this, SLOT(clickedConnect()));
     connect(this, SIGNAL(logSignal()),this,SLOT(onLogReady()));
-
-
-    setupRealtimeData(ui->customPlot,ui->customPlot2);
-
 }
 
 
@@ -107,7 +97,6 @@ void Dialog::openSerialPort()
         serial->setFlowControl( QSerialPort::NoFlowControl);
         serial->open(QIODevice::ReadWrite);
         qDebug()<<"comunicacion serial Ok";
-
     }
     else {
         qDebug()<<"Sin comunicacion serial";
@@ -133,15 +122,13 @@ void Dialog::onSerialRead()
     if (serial->bytesAvailable()) {
         ui->recvEdit->moveCursor(QTextCursor::End);
         datosPort = QString::fromLatin1(serial->readLine());
-//        qDebug()<<datosPort;
-//        onLogReady();
 
         if(playOn==false){
             ui->recvEdit->insertPlainText(datosPort);
         }
         else if(playOn==true){
-//            datosPort = QString::fromLatin1(serial->readLine());
             onLogReady();
+//            emit logSignal();
 //            if(flag_calculoGrafica_fin==true){
 //                emit logSignal();
 //                flag_calculoGrafica_fin=false;
@@ -156,7 +143,7 @@ void Dialog::onSerialRead()
 void Dialog::onLogReady()
 {
 
-    qDebug()<<listDatos;
+//    qDebug()<<listDatos;
     if(!datosPort.compare(datosPortTEMP)==0) // comparación de qstring i con i-1
     {
         listDatos = datosPort.split(",", QString::SkipEmptyParts);
@@ -176,21 +163,20 @@ void Dialog::onLogReady()
             listDatosCopy[6]=QString("%1").arg(key);
             //            listDatosCopy.removeLast();
             datosLog = listDatosCopy.join(" ");
+
 //            qDebug()<<datosPort;
 //            qDebug()<<datosLog;
-//                        ui->recvEditLog->insertPlainText(listDatosCopy.join("   "));
         }
         else graphONag= false;
 
-        //guardar en archivo
-
+        //!guardar en fichero TXT
         if(saveLogOn)
         {
             QString directory = "../log/"+ui->logFile->text()+".txt";
             QFile file(directory);
             if(file.open(QIODevice::WriteOnly | QIODevice::Text| QIODevice::Append)){
                 QTextStream out(&file);
-                 qDebug()<<datosLog;
+//                 qDebug()<<datosLog;
                 out<<datosLog<<"\n";//datosPort
                 file.close();
                 datosPortTEMP = datosPort;
@@ -227,16 +213,12 @@ void Dialog::clickedConnect()
 }
 
 //![3] FILTRO DE LA MEDIANA
-float Dialog::filterMedian(float valor, QList<float> vector)
+float Dialog::filterMedian(QList<float> vector)
 {
-    vector.prepend(valor);
     int vectorSize = vector.size();
     int posMedian;
     float returnValue;
-
     QVector<float> vectorTemp = vector.toVector();
-
-
     //ordenación de mayor a menor
     qStableSort(vectorTemp.begin(),vectorTemp.end());
     if(vectorSize%2==0){
@@ -248,33 +230,23 @@ float Dialog::filterMedian(float valor, QList<float> vector)
         posMedian = static_cast<int>((vectorSize+1)/2);
         returnValue= vectorTemp.at(posMedian-1);
     }
-    int boxValue = 20;
-    if(vectorSize>=boxValue){
-        vector.removeLast();
-    }
-
     //condición umbral
-    if(abs(valor-returnValue)> 1)
+    if(abs(vector.at(0)-returnValue)> 1)
     {
-        returnValue= valor;
+        returnValue= vector.at(0);
     }
-
-
-    //    vector->replace(0,returnValue);
     return returnValue;
 }
 
 //![4] FILTRO ESTIMACIÓN ALGEBRAICO [ Y ] DE M. FLIESS
-float Dialog::filterAlgebraic_Estimation(float valor, QList<float> vector)
+float Dialog::filterAlgebraic_Estimation(QList<float> vector)
 {
-    vector.prepend(valor);
     int vectorSize = vector.size();
     float suma = 0;
     float tempSuma;
     float tempSumaPeso;
-    int windowValue = 20;
+    int windowValue = 5;
     float stimation =0;
-
 
     for(int i=0;i<vectorSize;i++)
     {
@@ -287,20 +259,18 @@ float Dialog::filterAlgebraic_Estimation(float valor, QList<float> vector)
 
     if(vectorSize>=windowValue){
         stimation = 2*suma/(vectorSize*vectorSize);
-        vector.removeLast();
     }
     return stimation;
 }
 
 //![5] FILTRO ESTIMACIÓN ALGEBRAICO [ Y' ] DE M. FLIESS
-float Dialog::filterAlgebraic_DerivateEstimation(float valor, QList<float> vector)
+float Dialog::filterAlgebraic_DerivateEstimation(QList<float> vector)
 {
-    vector.prepend(valor);
     int vectorSize = vector.size();
     float suma = 0;
     float tempSuma;
     float tempSumaPeso;
-    int windowValue = 20;
+    int windowValue = 5;
     float derivada = 0;
 
     /*Derivada M Fliess */
@@ -313,11 +283,8 @@ float Dialog::filterAlgebraic_DerivateEstimation(float valor, QList<float> vecto
         suma = tempSuma + tempSumaPeso+ suma;
     }
 
-
-
     if(vectorSize>=windowValue){
         derivada = -6*suma/(vectorSize*vectorSize*vectorSize*0.05);
-        vector.removeLast();
     }
     return derivada;
 }
@@ -331,7 +298,7 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
     QMessageBox::critical(this, "", "You're using Qt < 4.7, the realtime data demo needs functions that are available with Qt 4.7 to work properly");
 #endif
     demoName = "Real Time Data";
-    qDebug()<<"dentro de setupRealTimeData()";
+//    qDebug()<<"dentro de setupRealTimeData()";
     customPlot->addGraph(); // blue line
     customPlot->graph(0)->setPen(QPen(Qt::blue));
     //  customPlot->graph(0)->setBrush(QBrush(QColor(240, 255, 200)));
@@ -416,7 +383,7 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
 
 
 
-//! VALORES DE LAS GRÁFICAS EN TIEMPO REAL
+//![7] VALORES DE LAS GRÁFICAS EN TIEMPO REAL
 void Dialog::realtimeDataSlot()
 {
 
@@ -425,22 +392,35 @@ void Dialog::realtimeDataSlot()
 
         key = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 - timeZero;
         //// Gráfica 1
-        value1_0 = (listDatos[1].toFloat())/reduccionAccel;
-        value1_1 = (listDatos[2].toFloat())/reduccionAccel;
-        value1_2 = (listDatos[3].toFloat())/reduccionAccel;
+        value1_0 = (listDatos[1].toFloat());
+        value1_1 = (listDatos[2].toFloat());
+        value1_2 = (listDatos[3].toFloat());
 
-//        value1_0 = filterMedian(value1_0,vector_1);
-//        value1_1 = filterMedian(value1_1,vector_2);
-//        value1_2 = filterMedian(value1_2,vector_3);
+        if(true) //VECTOR ACELERACIÓN MUESTREO
+        {
+            vector_1.prepend(value1_0);
+            vector_2.prepend(value1_1);
+            vector_3.prepend(value1_2);
+            if (vector_1.size()>20)
+            {
+                vector_1.removeLast();
+                vector_2.removeLast();
+                vector_3.removeLast();
+            }
+        }
 
+        value1_0 = filterMedian(vector_1);
+        value1_1 = filterMedian(vector_2);
+        value1_2 = filterMedian(vector_3);
 
-//        value1_0 = filterAlgebraic_Estimation(value1_0,vector2_1);
-//        value1_1 = filterAlgebraic_Estimation(value1_1,vector2_2);
-//        value1_2 = filterAlgebraic_Estimation(value1_2,vector2_3);
+        value1_0 = filterAlgebraic_Estimation(vector_1);
+        value1_1 = filterAlgebraic_Estimation(vector_2);
+        value1_2 = filterAlgebraic_Estimation(vector_3);
 
-        value1_0 = value1_0 - 1.045;
-        value1_1 = value1_1 - 1.045;
-        value1_2 = value1_2 - 1.08;
+        value1_0 = value1_0/sensiAccel;
+        value1_1 = value1_1/sensiAccel;
+        value1_2 = value1_2/sensiAccel;
+
 
         // add data to lines:
         ui->customPlot->graph(0)->addData(key, value1_0);
@@ -463,17 +443,33 @@ void Dialog::realtimeDataSlot()
         //    ui->customPlot->graph(2)->rescaleValueAxis();
 
         //// Gráfica 2
-        value2_0 = (listDatos[4].toFloat())/reduccionGyro;
-        value2_1 = (listDatos[5].toFloat())/reduccionGyro;
-        value2_2 = (listDatos[6].toFloat())/reduccionGyro;
+        value2_0 = (listDatos[4].toFloat());
+        value2_1 = (listDatos[5].toFloat());
+        value2_2 = (listDatos[6].toFloat());
 
-//        value2_0 = filterAlgebraic_Estimation(value2_0,vector_4);
-//        value2_1 = filterAlgebraic_Estimation(value2_1,vector_5);
-//        value2_2 = filterAlgebraic_Estimation(value2_2,vector_6);
+        if(true) //VECTOR VELOCIDAD ANGULAR MUESTREO
+        {
+            vector_4.prepend(value2_0);
+            vector_5.prepend(value2_1);
+            vector_6.prepend(value2_2);
+            if (vector_4.size()>20)
+            {
+                vector_4.removeLast();
+                vector_5.removeLast();
+                vector_6.removeLast();
+            }
+        }
+        value2_0 = filterMedian(vector_4);
+        value2_1 = filterMedian(vector_5);
+        value2_2 = filterMedian(vector_6);
 
-//        value2_0 = filterMedian(value2_0,vector_4);
-//        value2_1 = filterMedian(value2_1,vector_5);
-//        value2_2 = filterMedian(value2_2,vector_6);
+        value2_0 = filterAlgebraic_Estimation(vector_4);
+        value2_1 = filterAlgebraic_Estimation(vector_5);
+        value2_2 = filterAlgebraic_Estimation(vector_6);
+
+        value2_0 = value2_0/sensiGyro;
+        value2_1 = value2_1/sensiGyro;
+        value2_2 = value2_2/sensiGyro;
 
 
         // add data to lines:
