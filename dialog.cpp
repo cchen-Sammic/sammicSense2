@@ -329,7 +329,7 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
     customPlot->xAxis->setAutoTickStep(false);
     customPlot->xAxis->setTickStep(2);
     customPlot->xAxis2->setLabel("g-force      scale range ±2g");
-    customPlot->yAxis->setRange(0.0,4.0, Qt::AlignCenter);
+    customPlot->yAxis->setRange(0.0,10.0, Qt::AlignCenter);
     customPlot->axisRect()->setupFullAxesBox();
 
     // make left and bottom axes transfer their ranges to right and top axes:
@@ -366,7 +366,7 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
     customPlot2->xAxis->setAutoTickStep(false);
     customPlot2->xAxis->setTickStep(2);
     customPlot2->xAxis2->setLabel("Angular rate º/s       scale range ±250dps");
-    customPlot2->yAxis->setRange(0.0,720, Qt::AlignCenter);
+    customPlot2->yAxis->setRange(0.0,1800, Qt::AlignCenter);
     customPlot2->axisRect()->setupFullAxesBox();
 
     // make left and bottom axes transfer their ranges to right and top axes:
@@ -386,37 +386,41 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
 //![7] VALORES DE LAS GRÁFICAS EN TIEMPO REAL
 void Dialog::realtimeDataSlot()
 {
-
     if (graphONag)  //(graphONag)
     {
-
         key = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 - timeZero;
         //// Gráfica 1
-        value1_0 = (listDatos[1].toFloat());
-        value1_1 = (listDatos[2].toFloat());
-        value1_2 = (listDatos[3].toFloat());
-
         if(true) //VECTOR ACELERACIÓN MUESTREO
         {
+            value1_0 = (listDatos[1].toFloat());
+            value1_1 = (listDatos[2].toFloat());
+            value1_2 = (listDatos[3].toFloat());
             vector_1.prepend(value1_0);
             vector_2.prepend(value1_1);
             vector_3.prepend(value1_2);
-            if (vector_1.size()>20)
+            if (vector_1.size()>15)
             {
                 vector_1.removeLast();
                 vector_2.removeLast();
                 vector_3.removeLast();
             }
         }
-
-        value1_0 = filterMedian(vector_1);
-        value1_1 = filterMedian(vector_2);
-        value1_2 = filterMedian(vector_3);
-
-        value1_0 = filterAlgebraic_Estimation(vector_1);
-        value1_1 = filterAlgebraic_Estimation(vector_2);
-        value1_2 = filterAlgebraic_Estimation(vector_3);
-
+        if(true){
+            value1_0 = filterMedian(vector_1);
+            value1_1 = filterMedian(vector_2);
+            value1_2 = filterMedian(vector_3);
+            vector_1[0]=value1_0;
+            vector_2[0]=value1_1;
+            vector_3[0]=value1_2;
+        }
+        if(true){
+            value1_0 = filterAlgebraic_Estimation(vector_1);
+            value1_1 = filterAlgebraic_Estimation(vector_2);
+            value1_2 = filterAlgebraic_Estimation(vector_3);
+            vector_1[0]=value1_0;
+            vector_2[0]=value1_1;
+            vector_3[0]=value1_2;
+        }
         value1_0 = value1_0/sensiAccel;
         value1_1 = value1_1/sensiAccel;
         value1_2 = value1_2/sensiAccel;
@@ -443,30 +447,39 @@ void Dialog::realtimeDataSlot()
         //    ui->customPlot->graph(2)->rescaleValueAxis();
 
         //// Gráfica 2
-        value2_0 = (listDatos[4].toFloat());
-        value2_1 = (listDatos[5].toFloat());
-        value2_2 = (listDatos[6].toFloat());
-
         if(true) //VECTOR VELOCIDAD ANGULAR MUESTREO
         {
+            value2_0 = (listDatos[4].toFloat());
+            value2_1 = (listDatos[5].toFloat());
+            value2_2 = (listDatos[6].toFloat());
             vector_4.prepend(value2_0);
             vector_5.prepend(value2_1);
             vector_6.prepend(value2_2);
-            if (vector_4.size()>20)
+            if (vector_4.size()>15)
             {
                 vector_4.removeLast();
                 vector_5.removeLast();
                 vector_6.removeLast();
             }
         }
-        value2_0 = filterMedian(vector_4);
-        value2_1 = filterMedian(vector_5);
-        value2_2 = filterMedian(vector_6);
-
-        value2_0 = filterAlgebraic_Estimation(vector_4);
-        value2_1 = filterAlgebraic_Estimation(vector_5);
-        value2_2 = filterAlgebraic_Estimation(vector_6);
-
+        if(true)
+        {
+            value2_0 = filterMedian(vector_4);
+            value2_1 = filterMedian(vector_5);
+            value2_2 = filterMedian(vector_6);
+            vector_4[0] = value2_0;
+            vector_5[0] = value2_1;
+            vector_6[0] = value2_2;
+        }
+        if(true)
+        {
+            value2_0 = filterAlgebraic_Estimation(vector_4);
+            value2_1 = filterAlgebraic_Estimation(vector_5);
+            value2_2 = filterAlgebraic_Estimation(vector_6);
+            vector_4[0] = value2_0;
+            vector_5[0] = value2_1;
+            vector_6[0] = value2_2;
+        }
         value2_0 = value2_0/sensiGyro;
         value2_1 = value2_1/sensiGyro;
         value2_2 = value2_2/sensiGyro;
