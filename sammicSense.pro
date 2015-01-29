@@ -19,10 +19,12 @@ SOURCES += main.cpp\
         dialog.cpp \
     qcustomplot.cpp \
     hled.cpp \
+    filtro.cpp
 
 HEADERS  += dialog.h \
     qcustomplot.h \
     hled.h \
+    filtro.h
 
 
 FORMS    += dialog.ui
