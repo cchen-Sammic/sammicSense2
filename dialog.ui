@@ -250,7 +250,7 @@
      <property name="geometry">
       <rect>
        <x>0</x>
-       <y>80</y>
+       <y>30</y>
        <width>500</width>
        <height>451</height>
       </rect>
@@ -260,7 +260,7 @@
      <property name="geometry">
       <rect>
        <x>500</x>
-       <y>80</y>
+       <y>30</y>
        <width>500</width>
        <height>451</height>
       </rect>
@@ -269,9 +269,9 @@
     <widget class="QWidget" name="layoutWidget_2">
      <property name="geometry">
       <rect>
-       <x>530</x>
-       <y>90</y>
-       <width>151</width>
+       <x>550</x>
+       <y>490</y>
+       <width>182</width>
        <height>16</height>
       </rect>
      </property>
@@ -280,7 +280,6 @@
        <widget class="QLabel" name="graph2name_1">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -297,7 +296,6 @@
        <widget class="QLabel" name="graph2name_2">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -314,7 +312,6 @@
        <widget class="QLabel" name="graph2name_3">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -332,9 +329,9 @@
     <widget class="QWidget" name="layoutWidget_3">
      <property name="geometry">
       <rect>
-       <x>30</x>
-       <y>90</y>
-       <width>141</width>
+       <x>50</x>
+       <y>490</y>
+       <width>182</width>
        <height>16</height>
       </rect>
      </property>
@@ -343,7 +340,6 @@
        <widget class="QLabel" name="graph1name_1">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -360,7 +356,6 @@
        <widget class="QLabel" name="graph1name_2">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -377,7 +372,6 @@
        <widget class="QLabel" name="graph1name_3">
         <property name="font">
          <font>
-          <pointsize>6</pointsize>
           <weight>75</weight>
           <bold>true</bold>
          </font>
@@ -410,14 +404,14 @@
   <widget class="QLineEdit" name="statusPlot">
    <property name="geometry">
     <rect>
-     <x>750</x>
+     <x>820</x>
      <y>670</y>
-     <width>171</width>
+     <width>191</width>
      <height>20</height>
     </rect>
    </property>
    <property name="text">
-    <string>   0  FPS,      0  puntos/gráfica </string>
+    <string>     FPS,  Total Data points: </string>
    </property>
   </widget>
  </widget>

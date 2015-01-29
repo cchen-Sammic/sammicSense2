@@ -7,7 +7,6 @@
 #include <QMainWindow>
 #include <QtSerialPort/QSerialPort>
 #include "qcustomplot.h"
-#include "filtro.h"
 #include <QList>
 
 namespace Ui {
@@ -25,19 +24,17 @@ public:
 
 private:
     Ui::Dialog *ui;
+
     QSerialPort *serial;
-    filtro *filtroSenial;
     QString demoName;
     QTimer dataTimer;
     bool graphONag;
     bool playOn;
     bool saveLogOn;
-    bool comparacionLog_OK;
+    bool flag_calculoGrafica_fin;
     QStringList listDatos;
     QString datosPort;
     QString datosPortTEMP;
-    QString datosLog_OK;
-
     QFile file;
     QList<float> vectorTemp;
     QList<float> vector_1;
@@ -58,16 +55,16 @@ private:
     float value2_1;
     float value2_2;
     float timeZero;
-    float timeSecsCoordinate;
-    float numReg;
+    float key;
+
 
 
 private Q_SLOTS:
+
     void openSerialPort();
     void onSerialRead();
     void onSerialWrite();
-    void onLogReady(); //lectura y clafisicación de tados
-    void onSaveLogTXT(QString log);
+    void onLogReady(); //registro en txt
     void realtimeDataSlot(); //gráfica
     void clickedConnect(); //botón conexión arduino
 
@@ -79,7 +76,7 @@ private:
         float filterMedian(QList<float> vector);
 
 signals:
-        void signalSaveLog(QString log);
+        void logSignal();
 
 };
 

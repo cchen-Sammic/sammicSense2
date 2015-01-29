@@ -15,7 +15,6 @@ Dialog::Dialog(QWidget *parent) :
     ui(new Ui::Dialog)
 {
     ui->setupUi(this);
-    filtroSenial = new filtro();
     QDateTime dateTime = QDateTime::currentDateTime();
     QString dateTimeString = dateTime.toString("yyyy_MMMdd hh_mm");
     ui->logFile->setText(dateTimeString);
@@ -23,11 +22,10 @@ Dialog::Dialog(QWidget *parent) :
     sensiGyro = 131; //±250 º/s veloscidad angular: sensiGyro[LBS/(º/s)]
     sensiAccel = 16384; //±2g aceleración: sensiAccel[LSB/g]
     timeZero=0.0;
-    numReg =  0.0;
     playOn= false;
     saveLogOn = false;
     graphONag = false;
-    comparacionLog_OK = false;
+    flag_calculoGrafica_fin = true;
     ui->led->turnOff();
     serial = new QSerialPort(this);
 
@@ -82,7 +80,7 @@ void Dialog::initActionsConnections(){
     connect(serial, SIGNAL(readyRead()),this, SLOT(onSerialRead()));
     connect(ui->sendButton, SIGNAL(clicked()), SLOT(onSerialWrite()));
     connect(ui->playButton, SIGNAL(clicked()), this, SLOT(clickedConnect()));
-    connect(this, SIGNAL(signalSaveLog(QString)),this,SLOT(onSaveLogTXT(QString)));
+    connect(this, SIGNAL(logSignal()),this,SLOT(onLogReady()));
 }
 
 
@@ -130,16 +128,24 @@ void Dialog::onSerialRead()
         }
         else if(playOn==true){
             onLogReady();
+//            emit logSignal();
+//            if(flag_calculoGrafica_fin==true){
+//                emit logSignal();
+//                flag_calculoGrafica_fin=false;
+//            }
+
         }
     }
+
 }
 
-//![1.1] LETURA Y CLASIFICACIÓN
+//![1] LETURA, CLASIFICACIÓN Y GUARDAR  PARÁMETROS
 void Dialog::onLogReady()
 {
+
+//    qDebug()<<listDatos;
     if(!datosPort.compare(datosPortTEMP)==0) // comparación de qstring i con i-1
     {
-        comparacionLog_OK = false;
         listDatos = datosPort.split(",", QString::SkipEmptyParts);
 //        ui->recvEditLog->moveCursor(QTextCursor::End);
         static QString datosLog;
@@ -148,46 +154,38 @@ void Dialog::onLogReady()
             graphONag=true;
 
             QStringList listDatosCopy = listDatos;
-            listDatosCopy[0]=QString("%1,").arg(listDatos[1]);
-            listDatosCopy[1]=QString("%1,").arg(listDatos[2]);
-            listDatosCopy[2]=QString("%1,").arg(listDatos[3]);
-            listDatosCopy[3]=QString("%1,").arg(listDatos[4]);
-            listDatosCopy[4]=QString("%1,").arg(listDatos[5]);
-            listDatosCopy[5]=QString("%1,").arg(listDatos[6]);
-            listDatosCopy[6]=QString("%1").arg(timeSecsCoordinate);
+            listDatosCopy[0]=QString("%1, ").arg(listDatos[1]);
+            listDatosCopy[1]=QString("%1, ").arg(listDatos[2]);
+            listDatosCopy[2]=QString("%1, ").arg(listDatos[3]);
+            listDatosCopy[3]=QString("%1, ").arg(listDatos[4]);
+            listDatosCopy[4]=QString("%1, ").arg(listDatos[5]);
+            listDatosCopy[5]=QString("%1, ").arg(listDatos[6]);
+            listDatosCopy[6]=QString("%1").arg(key);
             //            listDatosCopy.removeLast();
             datosLog = listDatosCopy.join(" ");
-            if (datosLog!=datosLog_OK)
-            {
-                datosLog_OK = datosLog;
-                comparacionLog_OK = true;
-            }           
+
+//            qDebug()<<datosPort;
+//            qDebug()<<datosLog;
         }
         else graphONag= false;
 
-        //GUARDAR en FICHERO TXT
-        if(saveLogOn && comparacionLog_OK)
+        //!guardar en fichero TXT
+        if(saveLogOn)
         {
-            emit signalSaveLog(datosLog);
+            QString directory = "../log/"+ui->logFile->text()+".txt";
+            QFile file(directory);
+            if(file.open(QIODevice::WriteOnly | QIODevice::Text| QIODevice::Append)){
+                QTextStream out(&file);
+//                 qDebug()<<datosLog;
+                out<<datosLog<<"\n";//datosPort
+                file.close();
+                datosPortTEMP = datosPort;
+            }
         }
+
     }
+
 }
-
-//![1.2] GUARDAR LOG EN FICHERO TXT
-void Dialog::onSaveLogTXT(QString log){
-    QString directory = "../log/raw "+ui->logFile->text()+".txt";
-    QFile file(directory);
-    if(file.open(QIODevice::WriteOnly | QIODevice::Text| QIODevice::Append)){
-        QTextStream out(&file);
-        out<<numReg<<","<<log<<"\n";
-        file.close();
-        datosPortTEMP = datosPort;
-        numReg = numReg +1;
-    }
-}
-
-//![1.3] CARGAR LOG DE FICHERO TXT
-
 
 //![2] ON/OFF para REPRESENTACIÓN GRÁFICA
 void Dialog::clickedConnect()
@@ -197,7 +195,7 @@ void Dialog::clickedConnect()
         if(playOn==false){
             serial->write("0");
             ui->playButton->setText("PLAY");
-            timeZero = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 -60;
+            timeZero = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0-4;
             playOn= true;
             if(ui->saveBox->isChecked())
             {
@@ -209,12 +207,91 @@ void Dialog::clickedConnect()
             serial->write("1");
             ui->playButton->setText("PAUSE");
             playOn= false;
+
         }
     }
 }
 
+//![3] FILTRO DE LA MEDIANA
+float Dialog::filterMedian(QList<float> vector)
+{
+    int vectorSize = vector.size();
+    int posMedian;
+    float returnValue;
+    QVector<float> vectorTemp = vector.toVector();
+    //ordenación de mayor a menor
+    qStableSort(vectorTemp.begin(),vectorTemp.end());
+    if(vectorSize%2==0){
+        posMedian = vectorSize/2 ;
+        returnValue= (vectorTemp.at(posMedian-1)+vectorTemp.at(posMedian))/2;
+    }
+    else
+    {
+        posMedian = static_cast<int>((vectorSize+1)/2);
+        returnValue= vectorTemp.at(posMedian-1);
+    }
+    //condición umbral
+    if(abs(vector.at(0)-returnValue)> 1)
+    {
+        returnValue= vector.at(0);
+    }
+    return returnValue;
+}
 
-//![3.1] DEFINICIÓN DE LOS PARAMETROS DE LAS GRÁFICAS
+//![4] FILTRO ESTIMACIÓN ALGEBRAICO [ Y ] DE M. FLIESS
+float Dialog::filterAlgebraic_Estimation(QList<float> vector)
+{
+    int vectorSize = vector.size();
+    float suma = 0;
+    float tempSuma;
+    float tempSumaPeso;
+    int windowValue = 5;
+    float stimation =0;
+
+    for(int i=0;i<vectorSize;i++)
+    {
+        tempSumaPeso =float(2*vectorSize - 3*i);
+        tempSuma = vector.at(i)*tempSumaPeso;
+
+        /*Suma*/
+        suma = tempSuma + tempSumaPeso+ suma;
+    }
+
+    if(vectorSize>=windowValue){
+        stimation = 2*suma/(vectorSize*vectorSize);
+    }
+    return stimation;
+}
+
+//![5] FILTRO ESTIMACIÓN ALGEBRAICO [ Y' ] DE M. FLIESS
+float Dialog::filterAlgebraic_DerivateEstimation(QList<float> vector)
+{
+    int vectorSize = vector.size();
+    float suma = 0;
+    float tempSuma;
+    float tempSumaPeso;
+    int windowValue = 5;
+    float derivada = 0;
+
+    /*Derivada M Fliess */
+    for(int i=0;i<vectorSize;i++)
+    {
+        tempSumaPeso =float(vectorSize - 2*i);
+        tempSuma = vector.at(i)*tempSumaPeso;
+
+        /*Suma*/
+        suma = tempSuma + tempSumaPeso+ suma;
+    }
+
+    if(vectorSize>=windowValue){
+        derivada = -6*suma/(vectorSize*vectorSize*vectorSize*0.05);
+    }
+    return derivada;
+}
+
+
+
+//![6] DEFINICIÓN DE LOS PARAMETROS DE LAS GRÁFICAS
 void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
 {
 #if QT_VERSION < QT_VERSION_CHECK(4, 7, 0)
@@ -222,97 +299,96 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
 #endif
     demoName = "Real Time Data";
 //    qDebug()<<"dentro de setupRealTimeData()";
+    customPlot->addGraph(); // blue line
+    customPlot->graph(0)->setPen(QPen(Qt::blue));
+    //  customPlot->graph(0)->setBrush(QBrush(QColor(240, 255, 200)));
+    customPlot->graph(0)->setAntialiasedFill(false);
+    customPlot->addGraph(); // red line
+    customPlot->graph(1)->setPen(QPen(Qt::red));
+    //  customPlot->graph(0)->setChannelFillGraph(customPlot->graph(1));
+    customPlot->addGraph(); //green line
+    customPlot->graph(2)->setPen(QPen(Qt::green));
+    //  customPlot->graph(1)->setChannelFillGraph(customPlot->graph(2));
 
-    if(true)/*GRAFICA ACELERACION*/
-    {
-        customPlot->addGraph(); // blue line
-        customPlot->graph(0)->setPen(QPen(Qt::blue));
-        //  customPlot->graph(0)->setBrush(QBrush(QColor(240, 255, 200)));
-        customPlot->graph(0)->setAntialiasedFill(false);
-        customPlot->addGraph(); // red line
-        customPlot->graph(1)->setPen(QPen(Qt::red));
-        //  customPlot->graph(0)->setChannelFillGraph(customPlot->graph(1));
-        customPlot->addGraph(); //green line
-        customPlot->graph(2)->setPen(QPen(Qt::green));
-        //  customPlot->graph(1)->setChannelFillGraph(customPlot->graph(2));
-        customPlot->addGraph(); // BLUE dot
-        customPlot->graph(3)->setPen(QPen(Qt::blue));
-        customPlot->graph(3)->setLineStyle(QCPGraph::lsNone);
-        customPlot->graph(3)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot->addGraph(); // RED dot
-        customPlot->graph(4)->setPen(QPen(Qt::red));
-        customPlot->graph(4)->setLineStyle(QCPGraph::lsNone);
-        customPlot->graph(4)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot->addGraph(); // GREEN dot
-        customPlot->graph(5)->setPen(QPen(Qt::green));
-        customPlot->graph(5)->setLineStyle(QCPGraph::lsNone);
-        customPlot->graph(5)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot->xAxis->setTickLabelType(QCPAxis::ltDateTime);
-        customPlot->xAxis->setDateTimeFormat("mm:ss");
-        customPlot->xAxis->setAutoTickStep(false);
-        customPlot->xAxis->setTickStep(2);
-        customPlot->xAxis2->setLabel("g-force      scale range ±2g");
-        customPlot->yAxis->setRange(0.0,10.0, Qt::AlignCenter);
-        customPlot->axisRect()->setupFullAxesBox();
-        // make left and bottom axes transfer their ranges to right and top axes:
-        connect(customPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->xAxis2, SLOT(setRange(QCPRange)));
-        connect(customPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->yAxis2, SLOT(setRange(QCPRange)));
-    }
 
-    if(true) /*GRAFICA VELOCIDAD ANGULAR*/
-    {
-        customPlot2->addGraph(); // BLUE line
-        customPlot2->graph(0)->setPen(QPen(Qt::blue));
-        //  customPlot2->graph(0)->setBrush(QBrush(QColor(240, 255, 200)));
-        customPlot2->graph(0)->setAntialiasedFill(false);
-        customPlot2->addGraph(); // RED line
-        customPlot2->graph(1)->setPen(QPen(Qt::red));
-        //  customPlot2->graph(0)->setChannelFillGraph(customPlot->graph(1));
-        customPlot2->addGraph(); //GREEN line
-        customPlot2->graph(2)->setPen(QPen(Qt::green));
-        //  customPlot2->graph(1)->setChannelFillGraph(customPlot->graph(2));
-        customPlot2->addGraph(); // BLUE dot
-        customPlot2->graph(3)->setPen(QPen(Qt::blue));
-        customPlot2->graph(3)->setLineStyle(QCPGraph::lsNone);
-        customPlot2->graph(3)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot2->addGraph(); // RED dot
-        customPlot2->graph(4)->setPen(QPen(Qt::red));
-        customPlot2->graph(4)->setLineStyle(QCPGraph::lsNone);
-        customPlot2->graph(4)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot2->addGraph(); // GREEN dot
-        customPlot2->graph(5)->setPen(QPen(Qt::green));
-        customPlot2->graph(5)->setLineStyle(QCPGraph::lsNone);
-        customPlot2->graph(5)->setScatterStyle(QCPScatterStyle::ssDisc);
-        customPlot2->xAxis->setTickLabelType(QCPAxis::ltDateTime);
-        customPlot2->xAxis->setDateTimeFormat("mm:ss");
-        customPlot2->xAxis->setAutoTickStep(false);
-        customPlot2->xAxis->setTickStep(2);
-        customPlot2->xAxis2->setLabel("          Angular rate º/s       scale range ±250dps");
-        customPlot2->yAxis->setRange(0.0,1800, Qt::AlignCenter);
-        customPlot2->axisRect()->setupFullAxesBox();
-        // make left and bottom axes transfer their ranges to right and top axes:
-        connect(customPlot2->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot2->xAxis2, SLOT(setRange(QCPRange)));
-        connect(customPlot2->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot2->yAxis2, SLOT(setRange(QCPRange)));
-    }
+    customPlot->addGraph(); // blue dot
+    customPlot->graph(3)->setPen(QPen(Qt::blue));
+    customPlot->graph(3)->setLineStyle(QCPGraph::lsNone);
+    customPlot->graph(3)->setScatterStyle(QCPScatterStyle::ssDisc);
+    customPlot->addGraph(); // red dot
+    customPlot->graph(4)->setPen(QPen(Qt::red));
+    customPlot->graph(4)->setLineStyle(QCPGraph::lsNone);
+    customPlot->graph(4)->setScatterStyle(QCPScatterStyle::ssDisc);
+    customPlot->addGraph(); // green dot
+    customPlot->graph(5)->setPen(QPen(Qt::green));
+    customPlot->graph(5)->setLineStyle(QCPGraph::lsNone);
+    customPlot->graph(5)->setScatterStyle(QCPScatterStyle::ssDisc);
 
-    ui->graph1name_1->setText(QString("Accel X"));
-    ui->graph1name_2->setText(QString("Accel Y"));
-    ui->graph1name_3->setText(QString("Accel Z"));
-    ui->graph2name_1->setText(QString("Gyro X"));
-    ui->graph2name_2->setText(QString("Gyro Y"));
-    ui->graph2name_3->setText(QString("Gyro Z"));
+    customPlot->xAxis->setTickLabelType(QCPAxis::ltDateTime);
+    customPlot->xAxis->setDateTimeFormat("mm:ss");
+    customPlot->xAxis->setAutoTickStep(false);
+    customPlot->xAxis->setTickStep(2);
+    customPlot->xAxis2->setLabel("g-force      scale range ±2g");
+    customPlot->yAxis->setRange(0.0,10.0, Qt::AlignCenter);
+    customPlot->axisRect()->setupFullAxesBox();
+
+    // make left and bottom axes transfer their ranges to right and top axes:
+    connect(customPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->xAxis2, SLOT(setRange(QCPRange)));
+    connect(customPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->yAxis2, SLOT(setRange(QCPRange)));
+
+
+    customPlot2->addGraph(); // blue line
+    customPlot2->graph(0)->setPen(QPen(Qt::blue));
+    //  customPlot2->graph(0)->setBrush(QBrush(QColor(240, 255, 200)));
+    customPlot2->graph(0)->setAntialiasedFill(false);
+    customPlot2->addGraph(); // red line
+    customPlot2->graph(1)->setPen(QPen(Qt::red));
+    //  customPlot2->graph(0)->setChannelFillGraph(customPlot->graph(1));
+    customPlot2->addGraph(); //green line
+    customPlot2->graph(2)->setPen(QPen(Qt::green));
+    //  customPlot2->graph(1)->setChannelFillGraph(customPlot->graph(2));
+
+    customPlot2->addGraph(); // blue dot
+    customPlot2->graph(3)->setPen(QPen(Qt::blue));
+    customPlot2->graph(3)->setLineStyle(QCPGraph::lsNone);
+    customPlot2->graph(3)->setScatterStyle(QCPScatterStyle::ssDisc);
+    customPlot2->addGraph(); // red dot
+    customPlot2->graph(4)->setPen(QPen(Qt::red));
+    customPlot2->graph(4)->setLineStyle(QCPGraph::lsNone);
+    customPlot2->graph(4)->setScatterStyle(QCPScatterStyle::ssDisc);
+    customPlot2->addGraph(); // green dot
+    customPlot2->graph(5)->setPen(QPen(Qt::green));
+    customPlot2->graph(5)->setLineStyle(QCPGraph::lsNone);
+    customPlot2->graph(5)->setScatterStyle(QCPScatterStyle::ssDisc);
+
+    customPlot2->xAxis->setTickLabelType(QCPAxis::ltDateTime);
+    customPlot2->xAxis->setDateTimeFormat("mm:ss");
+    customPlot2->xAxis->setAutoTickStep(false);
+    customPlot2->xAxis->setTickStep(2);
+    customPlot2->xAxis2->setLabel("Angular rate º/s       scale range ±250dps");
+    customPlot2->yAxis->setRange(0.0,1800, Qt::AlignCenter);
+    customPlot2->axisRect()->setupFullAxesBox();
+
+    // make left and bottom axes transfer their ranges to right and top axes:
+    connect(customPlot2->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot2->xAxis2, SLOT(setRange(QCPRange)));
+    connect(customPlot2->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot2->yAxis2, SLOT(setRange(QCPRange)));
+
+
 
     // setup a timer that repeatedly calls MainWindow::realtimeDataSlot:
     connect(&dataTimer, SIGNAL(timeout()), this, SLOT(realtimeDataSlot()));
     dataTimer.start(0); // Interval 0 means to refresh as fast as possible
+
 }
 
-//![3.2] VALORES DE LAS GRÁFICAS EN TIEMPO REAL
+
+
+//![7] VALORES DE LAS GRÁFICAS EN TIEMPO REAL
 void Dialog::realtimeDataSlot()
 {
-    if (graphONag && comparacionLog_OK)
+    if (graphONag)  //(graphONag)
     {
-        timeSecsCoordinate = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 - timeZero;
+        key = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 - timeZero;
         //// Gráfica 1
         if(true) //VECTOR ACELERACIÓN MUESTREO
         {
@@ -329,18 +405,18 @@ void Dialog::realtimeDataSlot()
                 vector_3.removeLast();
             }
         }
-        if(true){//FILTRO SEÑAL MEDIANA
-            value1_0 = filtroSenial->fMedian(vector_1);
-            value1_1 = filtroSenial->fMedian(vector_2);
-            value1_2 = filtroSenial->fMedian(vector_3);
+        if(true){
+            value1_0 = filterMedian(vector_1);
+            value1_1 = filterMedian(vector_2);
+            value1_2 = filterMedian(vector_3);
             vector_1[0]=value1_0;
             vector_2[0]=value1_1;
             vector_3[0]=value1_2;
         }
-        if(true){//FILTRO SEÑAL ALGEBRAICA ESTIMACION
-            value1_0 = filtroSenial->fAlgebraic_Estimation(vector_1);
-            value1_1 = filtroSenial->fAlgebraic_Estimation(vector_2);
-            value1_2 = filtroSenial->fAlgebraic_Estimation(vector_3);
+        if(true){
+            value1_0 = filterAlgebraic_Estimation(vector_1);
+            value1_1 = filterAlgebraic_Estimation(vector_2);
+            value1_2 = filterAlgebraic_Estimation(vector_3);
             vector_1[0]=value1_0;
             vector_2[0]=value1_1;
             vector_3[0]=value1_2;
@@ -348,28 +424,27 @@ void Dialog::realtimeDataSlot()
         value1_0 = value1_0/sensiAccel;
         value1_1 = value1_1/sensiAccel;
         value1_2 = value1_2/sensiAccel;
-        if(true)//DIBUJAR GRAFICA 1: ACELERACION
-        {
-            // add data to lines:
-            ui->customPlot->graph(0)->addData(timeSecsCoordinate, value1_0);
-            ui->customPlot->graph(1)->addData(timeSecsCoordinate, value1_1);
-            ui->customPlot->graph(2)->addData(timeSecsCoordinate, value1_2);
-            // set data of dots:
-            ui->customPlot->graph(3)->clearData();
-            ui->customPlot->graph(3)->addData(timeSecsCoordinate, value1_0);
-            ui->customPlot->graph(4)->clearData();
-            ui->customPlot->graph(4)->addData(timeSecsCoordinate, value1_1);
-            ui->customPlot->graph(5)->clearData();
-            ui->customPlot->graph(5)->addData(timeSecsCoordinate, value1_2);
-            // remove data of lines that's outside visible range:
-            ui->customPlot->graph(0)->removeDataBefore(timeSecsCoordinate-8);
-            ui->customPlot->graph(1)->removeDataBefore(timeSecsCoordinate-8);
-            ui->customPlot->graph(2)->removeDataBefore(timeSecsCoordinate-8);
-            // rescale value (vertical) axis to fit the current data:
-            //    ui->customPlot->graph(0)->rescaleValueAxis();
-            //    ui->customPlot->graph(1)->rescaleValueAxis();
-            //    ui->customPlot->graph(2)->rescaleValueAxis();
-        }
+
+
+        // add data to lines:
+        ui->customPlot->graph(0)->addData(key, value1_0);
+        ui->customPlot->graph(1)->addData(key, value1_1);
+        ui->customPlot->graph(2)->addData(key, value1_2);
+        // set data of dots:
+        ui->customPlot->graph(3)->clearData();
+        ui->customPlot->graph(3)->addData(key, value1_0);
+        ui->customPlot->graph(4)->clearData();
+        ui->customPlot->graph(4)->addData(key, value1_1);
+        ui->customPlot->graph(5)->clearData();
+        ui->customPlot->graph(5)->addData(key, value1_2);
+        // remove data of lines that's outside visible range:
+        ui->customPlot->graph(0)->removeDataBefore(key-8);
+        ui->customPlot->graph(1)->removeDataBefore(key-8);
+        ui->customPlot->graph(2)->removeDataBefore(key-8);
+        // rescale value (vertical) axis to fit the current data:
+        //    ui->customPlot->graph(0)->rescaleValueAxis();
+        //    ui->customPlot->graph(1)->rescaleValueAxis();
+        //    ui->customPlot->graph(2)->rescaleValueAxis();
 
         //// Gráfica 2
         if(true) //VECTOR VELOCIDAD ANGULAR MUESTREO
@@ -387,20 +462,20 @@ void Dialog::realtimeDataSlot()
                 vector_6.removeLast();
             }
         }
-        if(true) //FILTRO SEÑAL DE LA MEDIANA
+        if(true)
         {
-            value2_0 = filtroSenial->fMedian(vector_4);
-            value2_1 = filtroSenial->fMedian(vector_5);
-            value2_2 = filtroSenial->fMedian(vector_6);
+            value2_0 = filterMedian(vector_4);
+            value2_1 = filterMedian(vector_5);
+            value2_2 = filterMedian(vector_6);
             vector_4[0] = value2_0;
             vector_5[0] = value2_1;
             vector_6[0] = value2_2;
         }
-        if(true)// FILTRO SEÑAL ALGEBRAICA ESTIMACIÓN
+        if(true)
         {
-            value2_0 = filtroSenial->fAlgebraic_Estimation(vector_4);
-            value2_1 = filtroSenial->fAlgebraic_Estimation(vector_5);
-            value2_2 = filtroSenial->fAlgebraic_Estimation(vector_6);
+            value2_0 = filterAlgebraic_Estimation(vector_4);
+            value2_1 = filterAlgebraic_Estimation(vector_5);
+            value2_2 = filterAlgebraic_Estimation(vector_6);
             vector_4[0] = value2_0;
             vector_5[0] = value2_1;
             vector_6[0] = value2_2;
@@ -408,55 +483,63 @@ void Dialog::realtimeDataSlot()
         value2_0 = value2_0/sensiGyro;
         value2_1 = value2_1/sensiGyro;
         value2_2 = value2_2/sensiGyro;
-        if(true)//DIBUJAR GRAFICA 2: VELOCIDAD ANGULAR
-        {
-            // add data to lines:
-            ui->customPlot2->graph(0)->addData(timeSecsCoordinate, value2_0);
-            ui->customPlot2->graph(1)->addData(timeSecsCoordinate, value2_1);
-            ui->customPlot2->graph(2)->addData(timeSecsCoordinate, value2_2);
-            // set data of dots:
-            ui->customPlot2->graph(3)->clearData();
-            ui->customPlot2->graph(3)->addData(timeSecsCoordinate, value2_0);
-            ui->customPlot2->graph(4)->clearData();
-            ui->customPlot2->graph(4)->addData(timeSecsCoordinate, value2_1);
-            ui->customPlot2->graph(5)->clearData();
-            ui->customPlot2->graph(5)->addData(timeSecsCoordinate, value2_2);
-            // remove data of lines that's outside visible range:
-            ui->customPlot2->graph(0)->removeDataBefore(timeSecsCoordinate-8);
-            ui->customPlot2->graph(1)->removeDataBefore(timeSecsCoordinate-8);
-            ui->customPlot2->graph(2)->removeDataBefore(timeSecsCoordinate-8);
-            // rescale value (vertical) axis to fit the current data:
-            //    ui->customPlot2->graph(0)->rescaleValueAxis();
-            //    ui->customPlot2->graph(1)->rescaleValueAxis();
-            //    ui->customPlot2->graph(2)->rescaleValueAxis();
-        }
 
-        //// Desplazamiento de eje X: desplazamiento en tiempo real
-        // make timeSecsCoordinate axis range scroll with the data (at a constant range size of 8):
-        ui->customPlot->xAxis->setRange(timeSecsCoordinate+0.15, 8, Qt::AlignRight);
+
+        // add data to lines:
+        ui->customPlot2->graph(0)->addData(key, value2_0);
+        ui->customPlot2->graph(1)->addData(key, value2_1);
+        ui->customPlot2->graph(2)->addData(key, value2_2);
+        // set data of dots:
+        ui->customPlot2->graph(3)->clearData();
+        ui->customPlot2->graph(3)->addData(key, value2_0);
+        ui->customPlot2->graph(4)->clearData();
+        ui->customPlot2->graph(4)->addData(key, value2_1);
+        ui->customPlot2->graph(5)->clearData();
+        ui->customPlot2->graph(5)->addData(key, value2_2);
+        // remove data of lines that's outside visible range:
+        ui->customPlot2->graph(0)->removeDataBefore(key-8);
+        ui->customPlot2->graph(1)->removeDataBefore(key-8);
+        ui->customPlot2->graph(2)->removeDataBefore(key-8);
+        // rescale value (vertical) axis to fit the current data:
+        //    ui->customPlot2->graph(0)->rescaleValueAxis();
+        //    ui->customPlot2->graph(1)->rescaleValueAxis();
+        //    ui->customPlot2->graph(2)->rescaleValueAxis();
+
+
+        // make key axis range scroll with the data (at a constant range size of 8):
+        ui->customPlot->xAxis->setRange(key+0.15, 8, Qt::AlignRight);
         ui->customPlot->replot();
-        // make timeSecsCoordinate axis range scroll with the data (at a constant range size of 8):
-        ui->customPlot2->xAxis->setRange(timeSecsCoordinate+0.15, 8, Qt::AlignRight);
+
+        // make key axis range scroll with the data (at a constant range size of 8):
+        ui->customPlot2->xAxis->setRange(key+0.15, 8, Qt::AlignRight);
         ui->customPlot2->replot();
 
-        //// Calculo de FPS y datos por gráfica
-        if(true) // CALCULATE FRAMES PER SECOND:
-        { static float lastFpsKey;
-            static int frameCount;
-            ++frameCount;
-            float average = timeSecsCoordinate-lastFpsKey;
-            if (average > 2) // average fps over 1 seconds
-            {
-                ui->statusPlot->setReadOnly(true);
-                ui->statusPlot->setText(
-                            QString("  %1 FPS,   %2 puntos/gráfica")
-                            .arg(frameCount/(timeSecsCoordinate-lastFpsKey), 0, 'f', 0)
-                            .arg(ui->customPlot->graph(0)->data()->count()+ui->customPlot->graph(1)->data()->count()+ui->customPlot->graph(2)->data()->count())
-                            );
-                lastFpsKey = timeSecsCoordinate;
-                frameCount = 0;
-            }
+        ui->graph1name_1->setText(QString("Accel X"));
+        ui->graph1name_2->setText(QString("Accel Y"));
+        ui->graph1name_3->setText(QString("Accel Z"));
+        ui->graph2name_1->setText(QString("Gyro X"));
+        ui->graph2name_2->setText(QString("Gyro Y"));
+        ui->graph2name_3->setText(QString("Gyro Z"));
+
+
+        // calculate frames per second:
+        static float lastFpsKey;
+        static int frameCount;
+        ++frameCount;
+        float average = key-lastFpsKey;
+        if (average > 2) // average fps over 1 seconds
+        {
+            ui->statusPlot->setReadOnly(true);
+            ui->statusPlot->setText(
+                        QString("  %1 FPS,  Total Data points: %2")
+                        .arg(frameCount/(key-lastFpsKey), 0, 'f', 0)
+                        .arg(ui->customPlot->graph(0)->data()->count()+ui->customPlot->graph(1)->data()->count()+ui->customPlot->graph(2)->data()->count())
+                        );
+            lastFpsKey = key;
+            frameCount = 0;
         }
+
     }
+    flag_calculoGrafica_fin = true;
 }
 
