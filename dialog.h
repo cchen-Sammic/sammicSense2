@@ -27,18 +27,16 @@ private:
     Ui::Dialog *ui;
     QSerialPort *serial;
     filtro *filtroSenial;
-    QString demoName;
     QTimer dataTimer;
-    bool graphONag;
-    bool playOn;
-    bool saveLogOn;
-    bool comparacionLog_OK;
-    QStringList listDatos;
+    QString demoName;
     QString datosPort;
     QString datosPortTEMP;
     QString datosLog_OK;
-
+    QString fileTXTselected;
+    QDir currentDir;
     QFile file;
+    QStringList listDatos;
+    QStringList filesInCurrentDir; // mostrar archivos txt
     QList<float> vectorTemp;
     QList<float> vector_1;
     QList<float> vector_2;
@@ -49,6 +47,10 @@ private:
     QList<float> vector2_1;
     QList<float> vector2_2;
     QList<float> vector2_3;
+    bool graphONag;
+    bool playOn;
+    bool saveLogOn;
+    bool comparacionLog_OK;
     int sensiGyro;
     int sensiAccel;
     float value1_0;
@@ -70,10 +72,12 @@ private Q_SLOTS:
     void onSaveLogTXT(QString log);
     void realtimeDataSlot(); //gráfica
     void clickedConnect(); //botón conexión arduino
+    void selectFile(int fila, int); //seleccionar fichero txt
 
 private:
         void initActionsConnections();
         void setupRealtimeData(QCustomPlot *customPlot, QCustomPlot *customPlot2);
+        void mostrarTablaFichero();
         float filterAlgebraic_DerivateEstimation(QList<float>vector);
         float filterAlgebraic_Estimation(QList<float>vector);
         float filterMedian(QList<float> vector);

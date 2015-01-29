@@ -18,8 +18,7 @@ Dialog::Dialog(QWidget *parent) :
     filtroSenial = new filtro();
     QDateTime dateTime = QDateTime::currentDateTime();
     QString dateTimeString = dateTime.toString("yyyy_MMMdd hh_mm");
-    ui->logFile->setText(dateTimeString);
-
+    ui->logFile->setText("raw "+dateTimeString);
     sensiGyro = 131; //±250 º/s veloscidad angular: sensiGyro[LBS/(º/s)]
     sensiAccel = 16384; //±2g aceleración: sensiAccel[LSB/g]
     timeZero=0.0;
@@ -30,7 +29,6 @@ Dialog::Dialog(QWidget *parent) :
     comparacionLog_OK = false;
     ui->led->turnOff();
     serial = new QSerialPort(this);
-
     QVector<float> setInitialValue;
     setInitialValue<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0<<0.0;
     vectorTemp = QList<float>::fromVector(setInitialValue);
@@ -43,10 +41,8 @@ Dialog::Dialog(QWidget *parent) :
     vector2_1= QList<float>::fromVector(setInitialValue);;
     vector2_2= QList<float>::fromVector(setInitialValue);;
     vector2_3= QList<float>::fromVector(setInitialValue);;
-
-
     setWindowTitle(tr("Sammic Sense"));
-    qDebug()<<"empezamos!";
+    mostrarTablaFichero();
     initActionsConnections();
 
 }
@@ -56,7 +52,6 @@ Dialog::~Dialog()
     if (serial->isOpen())
     {
         serial->write("9");
-//        QThread::msleep(20);
     }
     delete ui;
     delete serial;
@@ -64,6 +59,7 @@ Dialog::~Dialog()
 
 //! CONNECTIONs
 void Dialog::initActionsConnections(){
+
 
     foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()){
         ui->portBox->addItem(info.portName());
@@ -83,6 +79,7 @@ void Dialog::initActionsConnections(){
     connect(ui->sendButton, SIGNAL(clicked()), SLOT(onSerialWrite()));
     connect(ui->playButton, SIGNAL(clicked()), this, SLOT(clickedConnect()));
     connect(this, SIGNAL(signalSaveLog(QString)),this,SLOT(onSaveLogTXT(QString)));
+    connect(ui->tableLogTXT, SIGNAL(cellClicked(int,int)), this, SLOT(selectFile(int,int))); //SIGNAL(cellActivated(int,int))
 }
 
 
@@ -98,14 +95,15 @@ void Dialog::openSerialPort()
         serial->setStopBits(QSerialPort::OneStop);
         serial->setFlowControl( QSerialPort::NoFlowControl);
         serial->open(QIODevice::ReadWrite);
+        ui->openCloseButton->setIcon(QIcon(":/image/image/connect.png"));
         qDebug()<<"comunicacion serial Ok";
     }
     else {
         qDebug()<<"Sin comunicacion serial";
+        ui->openCloseButton->setIcon(QIcon(":/image/image/disconnect.png"));
         serial->close();
         ui->led->turnOff();
     }
-
     //update led's status
     ui->led->turnOn(serial->isOpen());
 }
@@ -143,10 +141,8 @@ void Dialog::onLogReady()
         listDatos = datosPort.split(",", QString::SkipEmptyParts);
 //        ui->recvEditLog->moveCursor(QTextCursor::End);
         static QString datosLog;
-
         if (listDatos[0]=="$a/g" && listDatos.size()==8){
             graphONag=true;
-
             QStringList listDatosCopy = listDatos;
             listDatosCopy[0]=QString("%1,").arg(listDatos[1]);
             listDatosCopy[1]=QString("%1,").arg(listDatos[2]);
@@ -155,7 +151,6 @@ void Dialog::onLogReady()
             listDatosCopy[4]=QString("%1,").arg(listDatos[5]);
             listDatosCopy[5]=QString("%1,").arg(listDatos[6]);
             listDatosCopy[6]=QString("%1").arg(timeSecsCoordinate);
-            //            listDatosCopy.removeLast();
             datosLog = listDatosCopy.join(" ");
             if (datosLog!=datosLog_OK)
             {
@@ -164,7 +159,6 @@ void Dialog::onLogReady()
             }           
         }
         else graphONag= false;
-
         //GUARDAR en FICHERO TXT
         if(saveLogOn && comparacionLog_OK)
         {
@@ -175,7 +169,7 @@ void Dialog::onLogReady()
 
 //![1.2] GUARDAR LOG EN FICHERO TXT
 void Dialog::onSaveLogTXT(QString log){
-    QString directory = "../log/raw "+ui->logFile->text()+".txt";
+    QString directory = "../log/"+ui->logFile->text()+".txt";
     QFile file(directory);
     if(file.open(QIODevice::WriteOnly | QIODevice::Text| QIODevice::Append)){
         QTextStream out(&file);
@@ -186,8 +180,51 @@ void Dialog::onSaveLogTXT(QString log){
     }
 }
 
-//![1.3] CARGAR LOG DE FICHERO TXT
+//![1.3] MOSTRAR FICHEROs TXT
+void Dialog::mostrarTablaFichero(){
+    //CREAR TABLA
+    ui->tableLogTXT->setSelectionBehavior(QAbstractItemView::SelectRows);
+    QStringList labels;
+    labels << tr("Filename") << tr("Size");
+    ui->tableLogTXT->setHorizontalHeaderLabels(labels);
+    ui->tableLogTXT->horizontalHeader()->resizeSection(0,220);
+    ui->tableLogTXT->horizontalHeader()->resizeSection(1,55);
+//    ui->tableLogTXT->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);//QHeaderView::Stretch
+    ui->tableLogTXT->verticalHeader()->hide();
+    ui->tableLogTXT->setShowGrid(false);
 
+
+    //MOSTRAR FICHERO EN LA TABLA
+    currentDir = QDir("../log/");
+    filesInCurrentDir = currentDir.entryList(QStringList("*"),
+                                 QDir::Files | QDir::NoSymLinks);
+
+    for (int i = 0; i < filesInCurrentDir.size(); ++i) {
+        QFile file(currentDir.absoluteFilePath(filesInCurrentDir[i]));
+        qint64 size = QFileInfo(file).size();
+
+        QTableWidgetItem *fileNameItem = new QTableWidgetItem(filesInCurrentDir[i]);
+        fileNameItem->setFlags(fileNameItem->flags() ^ Qt::ItemIsEditable);
+        QTableWidgetItem *sizeItem = new QTableWidgetItem(tr("%1 KB")
+                                             .arg(int((size + 1023) / 1024)));
+        sizeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        sizeItem->setFlags(sizeItem->flags() ^ Qt::ItemIsEditable);
+
+        int row = ui->tableLogTXT->rowCount();
+        ui->tableLogTXT->insertRow(row);
+        ui->tableLogTXT->setItem(row, 0, fileNameItem);
+        ui->tableLogTXT->setItem(row, 1, sizeItem);
+    }
+}
+
+//![1.4] SELECCIONAR FICHERO
+void Dialog::selectFile(int fila, int){
+    QTableWidgetItem *item = ui->tableLogTXT->item(fila, 0);
+     fileTXTselected = item->text();
+     ui->label_fichero->setText("  "+fileTXTselected);
+
+
+}
 
 //![2] ON/OFF para REPRESENTACIÓN GRÁFICA
 void Dialog::clickedConnect()
@@ -221,8 +258,6 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
     QMessageBox::critical(this, "", "You're using Qt < 4.7, the realtime data demo needs functions that are available with Qt 4.7 to work properly");
 #endif
     demoName = "Real Time Data";
-//    qDebug()<<"dentro de setupRealTimeData()";
-
     if(true)/*GRAFICA ACELERACION*/
     {
         customPlot->addGraph(); // blue line
