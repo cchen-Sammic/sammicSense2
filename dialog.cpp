@@ -73,13 +73,15 @@ void Dialog::initActionsConnections(){
     ui->baudRateBox->setCurrentIndex(3);
 
     setupRealtimeData(ui->customPlot,ui->customPlot2);
+    connect(&dataTimer, SIGNAL(timeout()), this, SLOT(realtimeDataSlot()));
 
     connect(ui->openCloseButton, SIGNAL(clicked()), this, SLOT(openSerialPort()));
     connect(serial, SIGNAL(readyRead()),this, SLOT(onSerialRead()));
     connect(ui->sendButton, SIGNAL(clicked()), SLOT(onSerialWrite()));
     connect(ui->playButton, SIGNAL(clicked()), this, SLOT(clickedConnect()));
     connect(this, SIGNAL(signalSaveLog(QString)),this,SLOT(onSaveLogTXT(QString)));
-    connect(ui->tableLogTXT, SIGNAL(cellClicked(int,int)), this, SLOT(selectFile(int,int))); //SIGNAL(cellActivated(int,int))
+    connect(ui->tableLogTXT, SIGNAL(cellClicked(int,int)), this, SLOT(selectFile(int,int)));
+    connect(ui->boton_cargarTXT,SIGNAL(clicked()), this, SLOT(loadDatafromFile()));
 }
 
 
@@ -116,7 +118,7 @@ void Dialog::onSerialWrite()
     ui->sendEdit->clear();
 }
 
-//![0.2] SERIAL READ
+//![0.2] SERIAL READ Y MOSTRAR
 void Dialog::onSerialRead()
 {
     if (serial->bytesAvailable()) {
@@ -139,7 +141,7 @@ void Dialog::onLogReady()
     {
         comparacionLog_OK = false;
         listDatos = datosPort.split(",", QString::SkipEmptyParts);
-//        ui->recvEditLog->moveCursor(QTextCursor::End);
+        //        ui->recvEditLog->moveCursor(QTextCursor::End);
         static QString datosLog;
         if (listDatos[0]=="$a/g" && listDatos.size()==8){
             graphONag=true;
@@ -156,7 +158,7 @@ void Dialog::onLogReady()
             {
                 datosLog_OK = datosLog;
                 comparacionLog_OK = true;
-            }           
+            }
         }
         else graphONag= false;
         //GUARDAR en FICHERO TXT
@@ -180,50 +182,68 @@ void Dialog::onSaveLogTXT(QString log){
     }
 }
 
-//![1.3] MOSTRAR FICHEROs TXT
+//![1.3] MOSTRAR FICHEROs TXT EN LA TABLA
 void Dialog::mostrarTablaFichero(){
-    //CREAR TABLA
-    ui->tableLogTXT->setSelectionBehavior(QAbstractItemView::SelectRows);
-    QStringList labels;
-    labels << tr("Filename") << tr("Size");
-    ui->tableLogTXT->setHorizontalHeaderLabels(labels);
-    ui->tableLogTXT->horizontalHeader()->resizeSection(0,220);
-    ui->tableLogTXT->horizontalHeader()->resizeSection(1,55);
-//    ui->tableLogTXT->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);//QHeaderView::Stretch
-    ui->tableLogTXT->verticalHeader()->hide();
-    ui->tableLogTXT->setShowGrid(false);
-
-
-    //MOSTRAR FICHERO EN LA TABLA
-    currentDir = QDir("../log/");
-    filesInCurrentDir = currentDir.entryList(QStringList("*"),
-                                 QDir::Files | QDir::NoSymLinks);
-
-    for (int i = 0; i < filesInCurrentDir.size(); ++i) {
-        QFile file(currentDir.absoluteFilePath(filesInCurrentDir[i]));
-        qint64 size = QFileInfo(file).size();
-
-        QTableWidgetItem *fileNameItem = new QTableWidgetItem(filesInCurrentDir[i]);
-        fileNameItem->setFlags(fileNameItem->flags() ^ Qt::ItemIsEditable);
-        QTableWidgetItem *sizeItem = new QTableWidgetItem(tr("%1 KB")
-                                             .arg(int((size + 1023) / 1024)));
-        sizeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        sizeItem->setFlags(sizeItem->flags() ^ Qt::ItemIsEditable);
-
-        int row = ui->tableLogTXT->rowCount();
-        ui->tableLogTXT->insertRow(row);
-        ui->tableLogTXT->setItem(row, 0, fileNameItem);
-        ui->tableLogTXT->setItem(row, 1, sizeItem);
+    if(true)//CREAR TABLA
+    {
+        ui->tableLogTXT->setSelectionBehavior(QAbstractItemView::SelectRows);
+        QStringList labels;
+        labels << tr("Filename") << tr("Size");
+        ui->tableLogTXT->setHorizontalHeaderLabels(labels);
+        ui->tableLogTXT->horizontalHeader()->resizeSection(0,220);
+        ui->tableLogTXT->horizontalHeader()->resizeSection(1,55);
+        //    ui->tableLogTXT->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);//QHeaderView::Stretch
+        ui->tableLogTXT->verticalHeader()->hide();
+        ui->tableLogTXT->setShowGrid(false);
+    }
+    if(true) //MOSTRAR FICHERO EN LA TABLA
+    {
+        currentDir = QDir("../log/");
+        filesInCurrentDir = currentDir.entryList(QStringList("*"),QDir::Files | QDir::NoSymLinks);
+        for (int i = 0; i < filesInCurrentDir.size(); ++i) {
+            QFile file(currentDir.absoluteFilePath(filesInCurrentDir[i]));
+            qint64 size = QFileInfo(file).size();
+            QTableWidgetItem *fileNameItem = new QTableWidgetItem(filesInCurrentDir[i]);
+            fileNameItem->setFlags(fileNameItem->flags() ^ Qt::ItemIsEditable);
+            QTableWidgetItem *sizeItem = new QTableWidgetItem(tr("%1 KB")
+                                                              .arg(int((size + 1023) / 1024)));
+            sizeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            sizeItem->setFlags(sizeItem->flags() ^ Qt::ItemIsEditable);
+            int row = ui->tableLogTXT->rowCount();
+            ui->tableLogTXT->insertRow(row);
+            ui->tableLogTXT->setItem(row, 0, fileNameItem);
+            ui->tableLogTXT->setItem(row, 1, sizeItem);
+        }
     }
 }
 
-//![1.4] SELECCIONAR FICHERO
+//![1.4] SELECCIONAR FICHERO DE LA TABLA
 void Dialog::selectFile(int fila, int){
     QTableWidgetItem *item = ui->tableLogTXT->item(fila, 0);
-     fileTXTselected = item->text();
-     ui->label_fichero->setText("  "+fileTXTselected);
+    fileTXTselected = item->text();
+    ui->label_fichero->setText("  "+fileTXTselected);
+}
 
-
+//![1.5] CARGAR FICHERO DE LA TABLA
+void Dialog::loadDatafromFile(){
+    QFile fichero("../log/"+fileTXTselected);
+    if(!fichero.open(QIODevice::ReadOnly | QIODevice::Text)){
+        qDebug()<<"error opening file:"<<file.error();
+        return;
+    }
+    QTextStream instream(&fichero);
+    QStringList loopData;
+    while(!instream.atEnd()){
+        QString line = instream.readLine();
+        loopData = line.split(",", QString::SkipEmptyParts);
+        if(!loopData.isEmpty()){
+            dataFromFile.append(loopData);
+        }
+    }
+    ui->recvEdit->insertPlainText(" FICHERO ... "+fileTXTselected+"\t# Preparado para trabjar: ***  OK  ***\n");
+    ui->recvEdit->insertPlainText(QString("\t\t\t# Número de datos totales a representar: %1 puntos").arg(dataFromFile.size()));
+//    qDebug()<<dataFromFile.at(231).at(7);
+    file.close();
 }
 
 //![2] ON/OFF para REPRESENTACIÓN GRÁFICA
@@ -236,6 +256,7 @@ void Dialog::clickedConnect()
             ui->playButton->setText("PLAY");
             timeZero = QDateTime::currentDateTime().toMSecsSinceEpoch()/1000.0 -60;
             playOn= true;
+            dataTimer.start(0.20);
             if(ui->saveBox->isChecked())
             {
                 saveLogOn= true;
@@ -245,6 +266,7 @@ void Dialog::clickedConnect()
         {
             serial->write("1");
             ui->playButton->setText("PAUSE");
+            dataTimer.stop();
             playOn= false;
         }
     }
@@ -338,8 +360,8 @@ void Dialog::setupRealtimeData(QCustomPlot *customPlot,QCustomPlot *customPlot2)
     ui->graph2name_3->setText(QString("Gyro Z"));
 
     // setup a timer that repeatedly calls MainWindow::realtimeDataSlot:
-    connect(&dataTimer, SIGNAL(timeout()), this, SLOT(realtimeDataSlot()));
-    dataTimer.start(0); // Interval 0 means to refresh as fast as possible
+//    connect(&dataTimer, SIGNAL(timeout()), this, SLOT(realtimeDataSlot()));
+//    dataTimer.start(1); // Interval 0 means to refresh as fast as possible
 }
 
 //![3.2] VALORES DE LAS GRÁFICAS EN TIEMPO REAL

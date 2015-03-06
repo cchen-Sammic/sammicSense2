@@ -114,7 +114,7 @@
       </item>
      </layout>
     </widget>
-    <widget class="QPushButton" name="boton_seleccionarTXT">
+    <widget class="QPushButton" name="boton_cargarTXT">
      <property name="geometry">
       <rect>
        <x>917</x>
@@ -216,7 +216,7 @@
      <property name="font">
       <font>
        <weight>75</weight>
-       <italic>true</italic>
+       <italic>false</italic>
        <bold>true</bold>
        <strikeout>false</strikeout>
       </font>
@@ -237,7 +237,7 @@
      <property name="font">
       <font>
        <weight>75</weight>
-       <italic>true</italic>
+       <italic>false</italic>
        <bold>true</bold>
        <underline>false</underline>
       </font>
@@ -393,21 +393,24 @@
       </rect>
      </property>
     </widget>
+    <zorder>label_8</zorder>
+    <zorder>led</zorder>
+    <zorder>openCloseButton</zorder>
+    <zorder>label</zorder>
+    <zorder>portBox</zorder>
+    <zorder>label_2</zorder>
+    <zorder>baudRateBox</zorder>
     <zorder>label_4</zorder>
     <zorder>label_3</zorder>
-    <zorder>layoutWidget</zorder>
     <zorder>tabWidget_2</zorder>
     <zorder>layoutWidget</zorder>
-    <zorder>layoutWidget</zorder>
-    <zorder>layoutWidget</zorder>
-    <zorder>layoutWidget_4</zorder>
     <zorder>logFile</zorder>
     <zorder>checkBox</zorder>
     <zorder>saveBox</zorder>
     <zorder>label_10</zorder>
     <zorder>tableLogTXT</zorder>
     <zorder>label_fichero</zorder>
-    <zorder>boton_seleccionarTXT</zorder>
+    <zorder>boton_cargarTXT</zorder>
    </widget>
    <widget class="QWidget" name="tab_graph">
     <attribute name="title">

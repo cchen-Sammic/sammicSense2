@@ -47,6 +47,7 @@ private:
     QList<float> vector2_1;
     QList<float> vector2_2;
     QList<float> vector2_3;
+    QList<QList<QString> > dataFromFile;
     bool graphONag;
     bool playOn;
     bool saveLogOn;
@@ -73,6 +74,7 @@ private Q_SLOTS:
     void realtimeDataSlot(); //gráfica
     void clickedConnect(); //botón conexión arduino
     void selectFile(int fila, int); //seleccionar fichero txt
+    void loadDatafromFile();
 
 private:
         void initActionsConnections();
